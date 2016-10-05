@@ -13,6 +13,11 @@
     {
         private static readonly HashSet<Type> auditableTypes = new HashSet<Type>();
 
+        public AuditDbContext(string nameOrConnectionString)
+          : base(nameOrConnectionString)
+        {
+        }
+
         public DbSet<AuditLog> AuditLogs { get; set; }
 
         protected virtual void Audit()
