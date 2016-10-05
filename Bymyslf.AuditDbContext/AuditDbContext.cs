@@ -1,20 +1,24 @@
 ﻿namespace Bymyslf.AuditDbContext
 {
     using System;
+    using System.Collections.Generic;
     using System.Data.Entity;
     using System.Data.Entity.Core;
+    using System.Data.Entity.Core.Objects;
     using System.Data.Entity.Infrastructure;
     using System.Linq;
     using System.Threading.Tasks;
 
     public class AuditDbContext : DbContext
     {
+        private static readonly HashSet<Type> auditableTypes = new HashSet<Type>();
+
         public DbSet<AuditLog> AuditLogs { get; set; }
 
         protected virtual void Audit()
         {
             var modifiedEntities = ChangeTracker.Entries()
-                                                .Where(p => p.State == EntityState.Deleted || p.State == EntityState.Modified)
+                                                .Where(p => (p.State == EntityState.Deleted || p.State == EntityState.Modified) && this.IsAuditableType(p))
                                                 .ToList();
 
             var dateChanged = DateTime.UtcNow;
@@ -50,6 +54,11 @@
             }
         }
 
+        public static void RegisterAuditableEntity(Type auditableType)
+        {
+            auditableTypes.Add(auditableType);
+        }
+
         public override int SaveChanges()
         {
             this.Audit();
@@ -67,6 +76,12 @@
         {
             var objectStateEntry = ((IObjectContextAdapter)this).ObjectContext.ObjectStateManager.GetObjectStateEntry(entry.Entity);
             return Tuple.Create(objectStateEntry.EntityKey, objectStateEntry.EntityKey.EntityKeyValues[0].Value);
+        }
+
+        private bool IsAuditableType(DbEntityEntry entry)
+        {
+            var type = ObjectContext.GetObjectType(entry.Entity.GetType());
+            return auditableTypes.Contains(type);
         }
     }
 }
