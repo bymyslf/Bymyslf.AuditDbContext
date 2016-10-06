@@ -1,15 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Bymyslf.AuditDbContext.Test
+﻿namespace Bymyslf.AuditDbContext.Test
 {
-    class Program
+    internal class Program
     {
-        static void Main(string[] args)
+        private static void Main(string[] args)
         {
+            using (var dbContext = new TestDbContext(""))
+            {
+            }
         }
     }
 }
