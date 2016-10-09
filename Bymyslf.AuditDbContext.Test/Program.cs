@@ -26,7 +26,6 @@
 
                 dbContext.Customers.Attach(customerInDb);
                 dbContext.Entry(customerInDb).State = EntityState.Modified;
-
                 dbContext.SaveChanges();
             }
 
