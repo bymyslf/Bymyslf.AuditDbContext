@@ -20,40 +20,45 @@
 
         public DbSet<AuditLog> AuditLogs { get; set; }
 
+        public static bool AuditingEnabled { get; set; } = true;
+
         protected virtual void Audit()
         {
+            if (!AuditingEnabled)
+            {
+                return;
+            }
+
             var modifiedEntities = ChangeTracker.Entries()
-                                                .Where(p => (p.State == EntityState.Deleted || p.State == EntityState.Modified) && this.IsAuditableType(p))
+                                                .Where(p => p.State == EntityState.Modified && this.IsAuditableType(p))
                                                 .ToList();
 
             var dateChanged = DateTime.UtcNow;
 
             foreach (var entity in modifiedEntities)
             {
-                var entityName = entity.Entity.GetType().Name;
+                var entityName = entity.Entity.GetType().FullName;
                 var primaryKeyFieldAndValue = this.GetPrimaryKeyFieldAndValue(entity);
 
                 foreach (var propertyName in entity.OriginalValues.PropertyNames)
                 {
                     var prop = entity.Property(propertyName);
-                    if (prop.IsModified)
+                    var originalValue = this.OriginalValue(entity, propertyName);
+                    var currentValue = this.CurrentValue(prop);
+                    if (originalValue != currentValue)
                     {
-                        var originalValue = (entity.OriginalValues[propertyName] ?? string.Empty).ToString();
-                        var currentValue = (entity.CurrentValues[propertyName] ?? string.Empty).ToString();
-                        if (originalValue != currentValue)
+                        this.AuditLogs.Add(new AuditLog()
                         {
-                            this.AuditLogs.Add(new AuditLog()
-                            {
-                                EntityName = entityName,
-                                PrimaryKeyField = primaryKeyFieldAndValue.Item1.ToString(),
-                                PrimaryKeyValue = primaryKeyFieldAndValue.Item2.ToString(),
-                                PropertyName = propertyName,
-                                Action = entity.State.ToString("G"),
-                                OldValue = originalValue,
-                                NewValue = currentValue,
-                                DateChanged = dateChanged
-                            });
-                        }
+                            Id = Guid.NewGuid(),
+                            EntityName = entityName,
+                            PrimaryKeyField = primaryKeyFieldAndValue.Item1,
+                            PrimaryKeyValue = primaryKeyFieldAndValue.Item2.ToString(),
+                            PropertyName = propertyName,
+                            Action = entity.State.ToString("G"),
+                            OldValue = originalValue,
+                            NewValue = currentValue,
+                            DateChanged = dateChanged
+                        });
                     }
                 }
             }
@@ -77,16 +82,26 @@
         }
 
         //http://stackoverflow.com/questions/7255089/get-the-primary-key-value-of-an-arbitrary-entity-in-code-first/8083687#8083687
-        private Tuple<EntityKey, object> GetPrimaryKeyFieldAndValue(DbEntityEntry entry)
+        private Tuple<string, object> GetPrimaryKeyFieldAndValue(DbEntityEntry entry)
         {
             var objectStateEntry = ((IObjectContextAdapter)this).ObjectContext.ObjectStateManager.GetObjectStateEntry(entry.Entity);
-            return Tuple.Create(objectStateEntry.EntityKey, objectStateEntry.EntityKey.EntityKeyValues[0].Value);
+            return Tuple.Create(objectStateEntry.EntityKey.EntityKeyValues[0].Key, objectStateEntry.EntityKey.EntityKeyValues[0].Value);
         }
 
         private bool IsAuditableType(DbEntityEntry entry)
         {
             var type = ObjectContext.GetObjectType(entry.Entity.GetType());
             return auditableTypes.Contains(type);
+        }
+
+        private string CurrentValue(DbPropertyEntry prop)
+        {
+            return (prop.CurrentValue ?? string.Empty).ToString();
+        }
+
+        private string OriginalValue(DbEntityEntry entry, string propertyName)
+        {
+            return (entry.GetDatabaseValues().GetValue<object>(propertyName) ?? string.Empty).ToString();
         }
     }
 }
